@@ -1,19 +1,19 @@
 package frc.robot.commands.Turret;
 
-import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj2.command.Command;
 //import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import frc.robot.RobotContainer;
 import frc.robot.subsystems.Turret;
+import frc.robot.Constants;
 
-public class StickRotationCommand extends Command {
+public class spinCommand extends Command {
 
     private final Turret turretSubsystem;
 
-    CommandXboxController driver = RobotContainer.driver;
+    CommandXboxController operator = RobotContainer.operator;
     
-    public StickRotationCommand(Turret turretSubsystem) {
+    public spinCommand(Turret turretSubsystem) {
         this.turretSubsystem = turretSubsystem;
 
         addRequirements(turretSubsystem);
@@ -24,8 +24,9 @@ public class StickRotationCommand extends Command {
     }
     
     public void execute() {
-        double rightX = driver.getRawAxis(turretSubsystem.rotationAxis);
-        turretSubsystem.runTurret(rightX * 0.1);
+        System.out.println("HIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII");
+        turretSubsystem.runTurret(Constants.turretConstants.speed);
+
     }
 
 }
