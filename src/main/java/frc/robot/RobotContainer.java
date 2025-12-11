@@ -52,7 +52,10 @@ public class RobotContainer {
     driver.a().whileTrue(turretSubsystem.negativeSpin());
 
     driver.x().whileTrue(turretSubsystem.lockontoTargetCommand());
+    driver.rightBumper().whileTrue(turretSubsystem.resetSetpoint());
     driver.y().onTrue(turretSubsystem.spinToAngleCommand(Constants.turretConstants.targetAngle));
+
+    //driver.rightBumper().onTrue(turretSubsystem.zeroEncoder());
     //driver.leftBumper().onTrue(coralSubsystem.L1Command());
     
   }

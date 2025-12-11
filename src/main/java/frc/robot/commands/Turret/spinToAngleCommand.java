@@ -21,8 +21,8 @@ public class spinToAngleCommand extends Command {
     }
 
     public void initialize() {
-        turretSubsystem.zeroEncoder();
-        //turretSubsystem.setTargetAngle(targetAngle);
+        turretSubsystem.zeroSetpoint();        //turretSubsystem.zeroEncoder();
+        turretSubsystem.setTargetAngle(targetAngle);
         turretSubsystem.enablePID();
     }
     

@@ -6,6 +6,7 @@ import com.kauailabs.navx.frc.AHRS;
 import com.revrobotics.spark.SparkLowLevel;
 
 import edu.wpi.first.math.controller.PIDController;
+import edu.wpi.first.math.controller.SimpleMotorFeedforward;
 import edu.wpi.first.networktables.GenericEntry;
 import edu.wpi.first.wpilibj.SPI;
 import edu.wpi.first.wpilibj.XboxController;
@@ -17,6 +18,7 @@ import frc.robot.commands.Turret.StickRotationCommand;
 import frc.robot.commands.Turret.spinCommand;
 import frc.robot.commands.Turret.negativeSpin;
 import frc.robot.commands.Turret.spinToAngleCommand;
+import frc.robot.commands.Turret.resetSetpoint;
 import frc.robot.Constants;
 import frc.robot.Constants.turretConstants;
 import frc.robot.commands.Turret.LockontoTargetCommand;
@@ -27,6 +29,7 @@ public class Turret extends SubsystemBase {
     private final SparkMax turretMotor;
     private final PIDController pidController;
     private final AHRS gyro;
+    private final SimpleMotorFeedforward feedforward = new SimpleMotorFeedforward(turretConstants.kS, turretConstants.kV, turretConstants.kA); // Tune these values
 
     private double outputSpeed;
     private double joystickSpeed;
@@ -36,6 +39,17 @@ public class Turret extends SubsystemBase {
     private static final double GEAR_RATIO = 7.5;
 
     public final int rotationAxis = XboxController.Axis.kRightX.value;
+
+    ShuffleboardTab tab = Shuffleboard.getTab("Turret");
+    GenericEntry pEntry = tab.add("SET P", turretConstants.kP).getEntry();
+    GenericEntry dEntry = tab.add("SET D", turretConstants.kD).getEntry();
+    GenericEntry iEntry = tab.add("SET I", turretConstants.kI).getEntry();
+
+    GenericEntry kEntry = tab.add("SET S", turretConstants.kS).getEntry();
+    GenericEntry vEntry = tab.add("SET V", turretConstants.kV).getEntry();
+    GenericEntry aEntry = tab.add("SET A", turretConstants.kA).getEntry();
+    GenericEntry toleranceEntry = tab.add("SET TOLERANCE", turretConstants.turretTolerance).getEntry();
+
 
     public Turret() {
         
@@ -47,13 +61,18 @@ public class Turret extends SubsystemBase {
         //pidController.enableContinuousInput(-180.0, 180.0);
         pidController.setTolerance(Constants.turretConstants.turretTolerance);
         gyro = new AHRS(SPI.Port.kMXP);
+
+        tab.addDouble("setpoint", () -> getTurretAngle());
+
+        pEntry.setDouble(Constants.turretConstants.kP);
+iEntry.setDouble(Constants.turretConstants.kI);
+dEntry.setDouble(Constants.turretConstants.kD);
+toleranceEntry.setDouble(Constants.turretConstants.turretTolerance);
+
+        
     }
 
-    ShuffleboardTab tab = Shuffleboard.getTab("Elevator");
-    GenericEntry pEntry = tab.add("SET P", turretConstants.kP).getEntry();
-    GenericEntry dEntry = tab.add("SET D", turretConstants.kD).getEntry();
-    GenericEntry iEntry = tab.add("SET I", turretConstants.kI).getEntry();
-
+    
     
     public boolean pidEnabled;
 
@@ -76,9 +95,13 @@ public class Turret extends SubsystemBase {
 
     public void updatePID() {
         double currentAngle = getTurretAngle();
-        double output = pidController.calculate(currentAngle, targetAngle);
-
-        turretMotor.set(output);
+        double pidOutput = pidController.calculate(currentAngle, targetAngle);
+        
+        // Calculate feedforward (velocity is approximately 0 for position control)
+        //double feedforwardOutput = feedforward.calculate(0);
+        
+        double totalOutput = Math.max(-1, Math.min(1, pidOutput));
+        turretMotor.set(totalOutput);
     }
 
     @Override
@@ -88,7 +111,7 @@ public class Turret extends SubsystemBase {
         pidController.setI(iEntry.getDouble(turretConstants.kI));
         pidController.setD(dEntry.getDouble(turretConstants.kD));
 
-        System.out.println("hello, pid is running");
+      //System.out.println("hello, pid is running");
         if (pidEnabled) {
             System.out.println("hello, pid is UPDATEDDDDDDDDDDDDDDDDDDDDDDDDDDDD");
             updatePID();
@@ -113,10 +136,15 @@ public class Turret extends SubsystemBase {
 
     public void zeroEncoder() {
         turretMotor.getEncoder().setPosition(0.0);
+        
     }
 
     public void setTargetAngle(double targetAngle) {
         this.targetAngle = targetAngle;
+    }
+
+    public void zeroSetpoint() {
+        pidController.setSetpoint(0.0);
     }
 
     public boolean isAtTargetAngle() {
@@ -168,9 +196,14 @@ public class Turret extends SubsystemBase {
         return new spinToAngleCommand(this, angle);
     }
 
+    public Command resetSetpoint() {
+        return new resetSetpoint(this);
+    }
+
     public void setDefaultCommand(Turret turretSubsystem, Object object) {
         // TODO Auto-generated method stub
         throw new UnsupportedOperationException("Unimplemented method 'setDefaultCommand'");
     }
 
 }
+
