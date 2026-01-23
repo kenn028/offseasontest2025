@@ -33,7 +33,7 @@ public class spinToAngleCommand extends Command {
     }
 
     public boolean isFinished() {
-        System.out.println("AT SETPOINT");
+        //System.out.println("AT SETPOINT");
         return turretSubsystem.isAtTargetAngle();
     }
 

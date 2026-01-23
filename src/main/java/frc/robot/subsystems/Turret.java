@@ -5,8 +5,9 @@ import com.kauailabs.navx.frc.AHRS;
 //import com.revrobotics.spark.config.SparkMaxConfig;
 import com.revrobotics.spark.SparkLowLevel;
 
-import edu.wpi.first.math.controller.PIDController;
+import edu.wpi.first.math.controller.ProfiledPIDController;
 import edu.wpi.first.math.controller.SimpleMotorFeedforward;
+import edu.wpi.first.math.trajectory.TrapezoidProfile;
 import edu.wpi.first.networktables.GenericEntry;
 import edu.wpi.first.wpilibj.SPI;
 import edu.wpi.first.wpilibj.XboxController;
@@ -27,14 +28,19 @@ public class Turret extends SubsystemBase {
 
 
     private final SparkMax turretMotor;
-    private final PIDController pidController;
+    private final ProfiledPIDController pidController;
     private final AHRS gyro;
+    private TrapezoidProfile.Constraints feedForwardConstraints;
     private final SimpleMotorFeedforward feedforward = new SimpleMotorFeedforward(turretConstants.kS, turretConstants.kV, turretConstants.kA); // Tune these values
 
     private double outputSpeed;
     private double joystickSpeed;
     private double currentAngle;
     private double targetAngle;
+
+    private double voltageValue;
+
+
 
     private static final double GEAR_RATIO = 7.5;
 
@@ -48,6 +54,9 @@ public class Turret extends SubsystemBase {
     GenericEntry kEntry = tab.add("SET S", turretConstants.kS).getEntry();
     GenericEntry vEntry = tab.add("SET V", turretConstants.kV).getEntry();
     GenericEntry aEntry = tab.add("SET A", turretConstants.kA).getEntry();
+
+    GenericEntry maxSpeedEntry = tab.add("SET max speed", turretConstants.turretMaxSpeed).getEntry();
+    GenericEntry maxAccelEntry = tab.add("SET max accel", turretConstants.turretMaxAccel).getEntry();
     GenericEntry toleranceEntry = tab.add("SET TOLERANCE", turretConstants.turretTolerance).getEntry();
 
 
@@ -57,23 +66,29 @@ public class Turret extends SubsystemBase {
         turretMotor = new SparkMax(Constants.turretConstants.turretMotorChannel, SparkLowLevel.MotorType.kBrushless);
         setDefaultCommand(new StickRotationCommand(this));
 
-        pidController = new PIDController(Constants.turretConstants.kP, Constants.turretConstants.kI, Constants.turretConstants.kD);
+        feedForwardConstraints = new TrapezoidProfile.Constraints(turretConstants.turretMaxSpeed,
+                turretConstants.turretMaxAccel);
+
+        pidController = new ProfiledPIDController(Constants.turretConstants.kP, 
+        Constants.turretConstants.kI, Constants.turretConstants.kD, feedForwardConstraints);
         //pidController.enableContinuousInput(-180.0, 180.0);
         pidController.setTolerance(Constants.turretConstants.turretTolerance);
         gyro = new AHRS(SPI.Port.kMXP);
 
-        tab.addDouble("setpoint", () -> getTurretAngle());
+        tab.addDouble("current angle", () -> getTurretAngle());
+
+        
+        
 
         pEntry.setDouble(Constants.turretConstants.kP);
-iEntry.setDouble(Constants.turretConstants.kI);
-dEntry.setDouble(Constants.turretConstants.kD);
-toleranceEntry.setDouble(Constants.turretConstants.turretTolerance);
+        iEntry.setDouble(Constants.turretConstants.kI);
+        dEntry.setDouble(Constants.turretConstants.kD);
+        vEntry.setDouble(Constants.turretConstants.kV);
+        toleranceEntry.setDouble(Constants.turretConstants.turretTolerance);
 
         
     }
-
-    
-    
+ 
     public boolean pidEnabled;
 
     public void enablePID() {
@@ -94,14 +109,19 @@ toleranceEntry.setDouble(Constants.turretConstants.turretTolerance);
     }
 
     public void updatePID() {
-        double currentAngle = getTurretAngle();
-        double pidOutput = pidController.calculate(currentAngle, targetAngle);
+        //double currentAngle = getTurretAngle();
+        // double pidOutput = pidController.calculate(currentAngle, targetAngle);
         
-        // Calculate feedforward (velocity is approximately 0 for position control)
-        //double feedforwardOutput = feedforward.calculate(0);
+        // // Calculate feedforward (velocity is approximately 0 for position control)
+        // double feedforwardOutput = feedforward.calculate(0.1);
         
-        double totalOutput = Math.max(-1, Math.min(1, pidOutput));
-        turretMotor.set(totalOutput);
+        // double totalOutput = Math.max(-1, Math.min(1, pidOutput));
+        // double turretOutput = totalOutput + feedforwardOutput;
+
+        voltageValue = pidController.calculate(getTurretAngle())
+                + feedforward.calculate(pidController.getSetpoint().velocity);
+        turretMotor.setVoltage(voltageValue);
+        //turretMotor.set(turretOutput);
     }
 
     @Override
@@ -109,7 +129,8 @@ toleranceEntry.setDouble(Constants.turretConstants.turretTolerance);
 
         pidController.setP(pEntry.getDouble(turretConstants.kP));
         pidController.setI(iEntry.getDouble(turretConstants.kI));
-        pidController.setD(dEntry.getDouble(turretConstants.kD));
+        pidController.setD(dEntry.getDouble(turretConstants.kD));   
+        //SimpleMotorFeedforward.setV(vEntry.getDouble(turretConstants.kV));
 
       //System.out.println("hello, pid is running");
         if (pidEnabled) {
@@ -131,7 +152,16 @@ toleranceEntry.setDouble(Constants.turretConstants.turretTolerance);
     public double getTurretAngle() {
         double motorRotations = turretMotor.getEncoder().getPosition();
         double turretRotations = motorRotations / GEAR_RATIO;
-        return turretRotations * 360.0;
+        return turretRotations * 360.0; //returns degrees
+    }
+    /**
+     * 
+     * @return
+     */
+    public double getCurrentVelocity() {
+        double currentVelocity = turretMotor.getEncoder().getVelocity();
+        double DegPerSec = currentVelocity * 360/60; 
+        return DegPerSec; 
     }
 
     public void zeroEncoder() {
@@ -140,15 +170,15 @@ toleranceEntry.setDouble(Constants.turretConstants.turretTolerance);
     }
 
     public void setTargetAngle(double targetAngle) {
-        this.targetAngle = targetAngle;
+        pidController.setGoal(targetAngle);
     }
 
     public void zeroSetpoint() {
-        pidController.setSetpoint(0.0);
+        pidController.reset(currentAngle);
     }
 
     public boolean isAtTargetAngle() {
-        return pidController.atSetpoint();
+        return pidController.atGoal();
     }
 
     // public void setTargetAngle(double targetAngle) {
